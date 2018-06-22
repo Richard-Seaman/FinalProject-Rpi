@@ -54,11 +54,11 @@ def get_fb_sockets(issueChanges):
     #log("Sockets: " + str(sockets), False)
     
     # Get socket values from dictionary
-    fb_socket_1 = sockets.get("socket1")
-    fb_socket_2 = sockets.get("socket2")
-    fb_socket_3 = sockets.get("socket3")
-    fb_socket_4 = sockets.get("socket4")
-    fb_socket_5 = sockets.get("socket5")
+    fb_socket_1 = sockets.get("socket1").get("status")
+    fb_socket_2 = sockets.get("socket2").get("status")
+    fb_socket_3 = sockets.get("socket3").get("status")
+    fb_socket_4 = sockets.get("socket4").get("status")
+    fb_socket_5 = sockets.get("socket5").get("status")
     
     # And whether or not to force an update
     # 0 = don't
@@ -110,6 +110,13 @@ def get_fb_sockets(issueChanges):
     if updated:
         # TODO: visibly indicate update somehow
         log("TODO: visual indication of socket change", False)
+    
+    # Set the last rpi sync time
+    curr_time_sec=int(time.time())
+    curr_time = time.strftime("%Y-%m-%d:%H-%M-%S")
+    data = {'time': curr_time_sec,'timeReadable': curr_time}
+    result = fbApp.put('/sockets', 'rpiLastCheck', data)
+    
 
 # Sync the sockets with whatever status we currently have
 def syncSockets():
@@ -123,7 +130,8 @@ def syncSockets():
     
 # Send 433MHz signal code
 def sendSignal(code):
-    log("TODO: send signal " + str(code), False)
+    log("Send signal " + str(code), False)
+    os.system("sudo 433Utils/RPi_utils/codesend " + str(code))
     
 # Reset force update
 def resetForceUpdate():
@@ -206,7 +214,7 @@ archiveFolder = get_folder(archiveFolderName)
 
 # Times to wait
 main_loop_delay = 1
-time_between_check_fb_sockets = 1  # delay between checking for socket changes on Firebase
+time_between_check_fb_sockets = 5  # delay between checking for socket changes on Firebase
 
 # Last done times 
 # Defined after fetching FB values
