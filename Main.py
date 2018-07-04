@@ -3,6 +3,8 @@ import time, datetime, os, stat
 import logging
 import signal, sys
 from firebase.firebase import FirebaseApplication, FirebaseAuthentication  # authentication & realtime database
+from xbee import XBee
+import serial
 
 ###########################################
 # LOCAL FUNCTIONS
@@ -116,7 +118,9 @@ def get_fb_sockets(issueChanges):
     curr_time = time.strftime("%Y-%m-%d:%H-%M-%S")
     data = {'time': curr_time_sec,'timeReadable': curr_time}
     result = fbApp.put('/sockets', 'rpiLastCheck', data)
-    
+ 
+def socketCallback(response):
+    println(Str(response))
 
 # Sync the sockets with whatever status we currently have
 def syncSockets():
@@ -145,6 +149,10 @@ def resetForceUpdate():
 # Cleanup
 def cleanup():
     log("Cleaning up and terminating...", False)
+    # Stop the XBee background thread
+    xbee.halt()
+    # Close the serial port
+    ser.close()
     # Archive the log
     os.rename(log_file_path, archiveFolder + "/" + time.strftime("%Y-%m-%d:%H-%M-%S") + " " + log_file_name)
 
@@ -154,7 +162,38 @@ def interupt_signal_handler(signal, frame):
     # Call the cleanup
     cleanup()
     sys.exit(0)
-  
+    
+# Process any responses from XBee nodes
+def process_response(response):
+    # Log
+    log(response, False)
+    rf = response['rf_data']
+    datalength = len(rf)
+    # if datalength has 2 bytes (1 for each temp, 1 for humidty)
+    if datalength == 2:
+        h = rf[0]
+        t = rf[1]
+        log('t = ' + str(t) + ' h = ' + str(h), False)
+        upload_sensor_readings(t, h)
+    # if it is not what was expected, log it
+    else:
+        log('Unknown data format, could not parse. Data ignored.', False)
+        
+# Upload Sensor readings
+def upload_sensor_readings(temperature, humidity):
+    # Construct the data to send to Firebase
+    # Use epock time as the key
+    # Add the readings, plus a human readable date string
+    curr_time_sec=int(time.time())
+    timeKey = int(time.time())
+    data = {'timestamp': curr_time, 'temperature':temperature, 'humidity': humidity}
+    result = fbApp.put('/sensors/dht', timeKey, data)
+    
+    # Log
+    log("Uploading to firebase:" + str(data), False)
+    
+    return result
+
 # END LOCAL FUNCTIONS
 ###########################################
 
@@ -176,6 +215,16 @@ for sig in [signal.SIGTERM, signal.SIGINT]:
     signal.signal(sig, interupt_signal_handler)        
 
 # Variable/Object definition before entering loop
+
+# Serial communication with XBee:
+PORT = '/dev/ttyUSB0' # (use 'dmesg' to discover port)
+BAUD_RATE = 9600
+
+# Open serial port
+ser = serial.Serial(PORT, BAUD_RATE)
+
+# Create XBee object and set the callback function
+xbee = XBee(ser, callback=process_response)
 
 # Socket statuses (1 = on, 0 = off)
 # (defaults before firebase queried)
@@ -213,7 +262,7 @@ archiveFolderName = "Archive"  # vairable used to ensure same name used below
 archiveFolder = get_folder(archiveFolderName)
 
 # Times to wait
-main_loop_delay = 1
+main_loop_delay = 0.1
 time_between_check_fb_sockets = 5  # delay between checking for socket changes on Firebase
 
 # Last done times 
@@ -224,6 +273,8 @@ last_check_sockets = int(time.time()) # already synced initially above, no need 
 while True:
     
     try:
+        # Note: Sensor respones are handled on background thread
+            
         # Get the current day / time        
         curr_time_sec=int(time.time())
         curr_time = time.strftime("%Y-%m-%d:%H-%M-%S")
