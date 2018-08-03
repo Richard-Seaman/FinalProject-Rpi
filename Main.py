@@ -26,7 +26,7 @@ def get_folder(folder_name):
     #print(full_path + "\n")
     # Split between directory and file (head and tail)
     directory, filename = os.path.split(full_path)
-    #print("Dir: " + directory + "\nFile: " + filename + "\n")
+    #print("Dir: " + directory + "\nFile: " + filename + "\n") 
     # Define folder path
     folder_path = directory + "/" + folder_name + "/"
     #print(folder_path + "\n")
@@ -66,6 +66,13 @@ def get_fb_sockets(issueChanges):
     # 0 = don't
     # 1 = do
     fb_force_update = sockets.get("forceUpdate")
+    
+    # Check the sync interval
+    global time_between_check_fb_sockets
+    fb_sync_interval = sockets.get("rpiSyncInterval")
+    if time_between_check_fb_sockets != fb_sync_interval:
+        log("Sync Interval Updated: " + str(fb_sync_interval) + "s", False)
+        time_between_check_fb_sockets = fb_sync_interval    
     
     # Update & Log if different to current
     updated = False
@@ -110,8 +117,8 @@ def get_fb_sockets(issueChanges):
         updated = True
     
     if updated:
-        # TODO: visibly indicate update somehow
-        log("TODO: visual indication of socket change", False)
+        # Log that a socket changed
+        log("Socket status changed", False)
     
     # Set the last rpi sync time
     curr_time_sec=int(time.time())
@@ -184,8 +191,8 @@ def upload_sensor_readings(temperature, humidity):
     # Construct the data to send to Firebase
     # Use epock time as the key
     # Add the readings, plus a human readable date string
-    curr_time_sec=int(time.time())
     timeKey = int(time.time())
+    curr_time = time.strftime("%Y-%m-%d:%H-%M-%S")
     data = {'timestamp': curr_time, 'temperature':temperature, 'humidity': humidity}
     result = fbApp.put('/sensors/dht', timeKey, data)
     
@@ -246,6 +253,14 @@ SOCKET_4_OFF = 4308437
 SOCKET_5_ON = 4308443
 SOCKET_5_OFF = 4308435
 
+# Local Folders
+archiveFolderName = "Archive"  # vairable used to ensure same name used below
+archiveFolder = get_folder(archiveFolderName)
+
+# Times to wait
+main_loop_delay = 0.1
+time_between_check_fb_sockets = 5  # delay between checking for socket changes on Firebase
+
 # Firebase App
 log("Initialising Firebase...", False)
 fbApp = FirebaseApplication('https://home-automation-project-fa23c.firebaseio.com/', authentication=None) 
@@ -256,14 +271,6 @@ fbApp.authentication = authentication
 
 # Firebase socket values
 get_fb_sockets(False)
-
-# Local Folders
-archiveFolderName = "Archive"  # vairable used to ensure same name used below
-archiveFolder = get_folder(archiveFolderName)
-
-# Times to wait
-main_loop_delay = 0.1
-time_between_check_fb_sockets = 5  # delay between checking for socket changes on Firebase
 
 # Last done times 
 # Defined after fetching FB values
